@@ -17,7 +17,46 @@ namespace Client
         static DateTime ClientDateConnection;
         static void Main(string[] args) {
             OnSettings();
+            while (true)
+            {
+                SetCommand();
+            }
         }
+        public static void SetCommand() {
+        Console.ForegroundColor = ConsoleColor.Red;
+            string Command = Console.ReadLine();
+            if (Command == "/config")
+            {
+                File.Delete(Directory.GetCurrentDirectory() + "/.config");
+                OnSettings();
+            }
+            else if (Command == "/connect") ;
+            else if (Command == "/status");
+            else if (Command == "/help") Help();
+        }
+
+         static void Help()
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("Commands to the server: ");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/config");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - set initial settings ");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/connect");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - connection to the server ");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/status");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - show list users ");
+
+        }
+
         static void OnSettings() {
             string Path = Directory.GetCurrentDirectory() + "/.config";
             string IpAddress = "";
