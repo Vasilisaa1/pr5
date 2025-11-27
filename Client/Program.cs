@@ -31,11 +31,20 @@ namespace Client
                 OnSettings();
             }
             else if (Command == "/connect") ;
-            else if (Command == "/status");
+            else if (Command == "/status") GetStatus();
             else if (Command == "/help") Help();
         }
 
-         static void Help()
+        private static void GetStatus()
+        {
+            int Duration = (int)DateTime.Now.Subtract(ClientDateConnection).TotalSeconds;
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine($"Client: {ClientToken}, time connection: {ClientDateConnection.ToString("HH:mm:ss dd.MM")}, " +
+                $"duration: {Duration}"
+                );
+        }
+
+        static void Help()
         {
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("Commands to the server: ");
