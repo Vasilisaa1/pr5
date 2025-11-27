@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,7 +11,7 @@ namespace Client
 {
     public class Program
     {
-        static IPAddress ServerIpAdress;
+        static IPAddress ServerIpAddress;
         static int ServerPort;
 
         static string ClientToken;
@@ -30,10 +31,47 @@ namespace Client
                 File.Delete(Directory.GetCurrentDirectory() + "/.config");
                 OnSettings();
             }
-            else if (Command == "/connect") ;
+            else if (Command == "/connect") ConnectServer();
             else if (Command == "/status") GetStatus();
             else if (Command == "/help") Help();
         }
+
+             static void ConnectServer()
+             {
+                    IPEndPoint endPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+                    Socket Socket = new Socket(
+                        AddressFamily.InterNetwork,
+                        SocketType.Stream,
+                        ProtocolType.Tcp);
+                    try {
+                        Socket.Connect(endPoint);
+                    }
+                    catch(Exception ex) {
+            
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Error" + ex.Message);
+                    }
+                    if (Socket.Connected) {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("Connection to server successful");
+
+                        Socket.Send(Encoding.UTF8.GetBytes("/token"));
+                        byte[] Bytes = new byte[10485760];
+                        int ByteRec = Socket.Receive(Bytes);
+                        string Response= Encoding.UTF8.GetString(Bytes,0,ByteRec);
+                        if (Response == "/limit") {
+
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("There is not enough space on the license server" );
+                        }
+                        else {
+                            ClientToken = Response;
+                            ClientDateConnection = DateTime.Now;
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Recieved connection token: " + ClientToken);
+                }
+                    }
+             }
 
         private static void GetStatus()
         {
@@ -73,7 +111,7 @@ namespace Client
                 {
                     StreamReader streamReader = new StreamReader(Path);
                 IpAddress = streamReader.ReadLine();
-                    ServerIpAdress = IPAddress.Parse(IpAddress);
+                ServerIpAddress = IPAddress.Parse(IpAddress);
                     ServerPort = int.Parse(streamReader.ReadLine());
                     streamReader.Close();
 
@@ -93,7 +131,7 @@ namespace Client
                     Console.Write("Please provide the IP address if the license server: ");
                     Console.ForegroundColor = ConsoleColor.Green;
                     IpAddress = Console.ReadLine();
-                    ServerIpAdress = IPAddress.Parse(IpAddress);
+                ServerIpAddress = IPAddress.Parse(IpAddress);
 
                     Console.ForegroundColor = ConsoleColor.White;
                     Console.Write("Please specify the liecens server port: ");
