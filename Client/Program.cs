@@ -18,6 +18,11 @@ namespace Client
         static DateTime ClientDateConnection;
         static void Main(string[] args) {
             OnSettings();
+
+
+            Thread tCheckToken = new Thread(CheckToken);
+            tCheckToken.Start();
+
             while (true)
             {
                 SetCommand();
@@ -35,8 +40,53 @@ namespace Client
             else if (Command == "/status") GetStatus();
             else if (Command == "/help") Help();
         }
+        public static void CheckToken()
+        {
+            while (true)
+            {
+                if (!String.IsNullOrEmpty(ClientToken))
+                {
+                    IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+                    Socket Socket = new Socket(
+                        AddressFamily.InterNetwork,
+                        SocketType.Stream,
+                        ProtocolType.Tcp);
 
-             static void ConnectServer()
+                    try
+                    {
+                        Socket.Connect(EndPoint); ;
+
+                    }
+                    catch (Exception exp)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Error: " + exp.Message);
+                    }
+
+                    if (Socket.Connected)
+                    {
+
+                        Socket.Send(Encoding.UTF8.GetBytes(ClientToken));
+
+                        byte[] Bytes = new byte[10485760];
+                        int ByteRec = Socket.Receive(Bytes);
+
+                        string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                        if (Response == "/disconnect")
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("The client is disconnected from server");
+                            ClientToken = String.Empty;
+                        }
+                    }
+                }
+
+                Thread.Sleep(1000);
+            }
+
+
+        }   
+        static void ConnectServer()
              {
                     IPEndPoint endPoint = new IPEndPoint(ServerIpAddress, ServerPort);
                     Socket Socket = new Socket(
