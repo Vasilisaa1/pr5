@@ -19,7 +19,37 @@ namespace Server
         static int Duration;
         static List<Classes.Client> AllClients = new List<Classes.Client>();
         static void Main(string[] args)
-        { 
+        {
+            OnSettings();
+
+            Thread tListenel = new Thread(ConnectServer);
+            tListenel.Start();
+
+            Thread tDisconnect = new Thread(CheckDisconnectClient);
+            tDisconnect.Start();
+            while (true)
+            {
+                SetCommand();
+            }
+        }
+        static void CheckDisconnectClient()
+        {
+            while (true)
+            {
+                for (int iClient = 0; iClient < AllClients.Count; iClient++)
+                {
+                    int ClientDuration = (int)DateTime.Now.Subtract(AllClients[iClient].DateConnect).TotalSeconds;
+
+                    if (ClientDuration > Duration)
+                    {
+                        Console.ForegroundColor = ConsoleColor.White;
+                        Console.WriteLine($"Client: {AllClients[iClient].Token} disconnect from server to timeout");
+
+                        AllClients.RemoveAt(iClient);
+                    }
+                }
+                Thread.Sleep(1000);
+            }
         }
         public static void SetCommand()
         {
