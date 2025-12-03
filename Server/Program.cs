@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Server.Classes;
 
 namespace Server
 {
@@ -183,6 +184,53 @@ namespace Server
                 Handler.Send(Encoding.UTF8.GetBytes(Response));
             }
 
+        }
+        static string SetCommandClient(string Command)
+        {
+
+
+            if (Command.StartsWith("/connect"))
+            {
+                string[] parts = Command.Split(' ');
+                if (parts.Length != 3) return "/auth_fail";
+
+                string login = parts[1];
+                string password = parts[2];
+
+                using var db = new DbContexted();
+
+                if (db.blackLists.Any(x => x.Login == login))
+                    return "/banned";
+
+                var user = db.Users.FirstOrDefault(x => x.Login == login && x.Password == password);
+                if (user == null)
+                    return "/auth_fail";
+
+                if (AllClients.Count < MaxClient)
+                {
+                    Classes.Client newClient = new Classes.Client();
+                    AllClients.Add(newClient);
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"New client connection: " + newClient.Token);
+
+                    return newClient.Token;
+
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"There is not enougt space on the license server");
+                    return "/limit";
+                }
+
+
+            }
+            else
+            {
+                Client c = AllClients.Find(x => x.Token == Command);
+                return c != null ? "/connect" : "/disconnect";
+            }
+            return null;
         }
 
 
