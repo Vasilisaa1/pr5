@@ -162,6 +162,28 @@ namespace Server
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("/config");
         }
+        public static void ConnectServer()
+        {
+            IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+            Socket SocketListener = new Socket(
+                AddressFamily.InterNetwork,
+                SocketType.Stream,
+                ProtocolType.Tcp);
+            SocketListener.Bind(EndPoint);
+            SocketListener.Listen(10);
+            while (true)
+            {
+                Socket Handler = SocketListener.Accept();
+                byte[] Bytes = new byte[10485760];
+                int ByteRec = Handler.Receive(Bytes);
+
+                string Message = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                string Response = SetCommandClient(Message);
+
+                Handler.Send(Encoding.UTF8.GetBytes(Response));
+            }
+
+        }
 
 
     }
