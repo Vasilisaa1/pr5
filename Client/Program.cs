@@ -13,58 +13,23 @@ namespace Client
     {
         static IPAddress ServerIpAddress;
         static int ServerPort;
-        static int MaxClient;
-        static int Duration;
-        static List<Classes.Client> AllClients = new List<Classes.Client>();
+
+        static string ClientToken;
+        static DateTime ClientDateConnection;
+
         static void Main(string[] args)
         {
             OnSettings();
 
-            Thread tListenel = new Thread(ConnectServer);
-            tListenel.Start();
+            Thread tCheckToken = new Thread(CheckToken);
+            tCheckToken.Start();
 
-            Thread tDisconnect = new Thread(CheckDisconnectClient);
-            tDisconnect.Start();
             while (true)
             {
                 SetCommand();
             }
         }
 
-        static void CheckDisconnectClient()
-        {
-            while (true)
-            {
-                for (int iClient = 0; iClient < AllClients.Count; iClient++)
-                {
-                    int ClientDuration = (int)DateTime.Now.Subtract(AllClients[iClient].DateConnect).TotalSeconds;
-
-                    if (ClientDuration > Duration)
-                    {
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine($"Client: {AllClients[iClient].Token} disconnect from server to timeout");
-
-                        AllClients.RemoveAt(iClient);
-                    }
-                }
-                Thread.Sleep(1000);
-            }
-        }
-        public static void GetStatus()
-        {
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine($"Count Clients: {AllClients.Count}");
-            foreach (Classes.Client Client in AllClients)
-            {
-                int Duration = (int)DateTime.Now.Subtract(Client.DateConnect).TotalSeconds;
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine($"Client: {Client.Token}, time connection: {Client.DateConnect.ToString("HH:mm:ss dd.MM")}, " +
-                    $"duration: {Duration}"
-                    );
-            }
-
-
-        }
         public static void SetCommand()
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -75,101 +40,114 @@ namespace Client
                 File.Delete(Directory.GetCurrentDirectory() + "/.config");
                 OnSettings();
             }
-            else if (Command.Contains("/disconnect")) DisconnectServer(Command);
+            else if (Command == "/connect") ConnectServer();
             else if (Command == "/status") GetStatus();
             else if (Command == "/help") Help();
-            else if (Command == "/ban") Ban(Command);
-            else if (Command == "/unblock") Unblock(Command);
         }
 
-        public static void Unblock(string command)
+        public static void ConnectServer()
         {
-            Console.Write("Login: ");
-            string login = Console.ReadLine();
-            if (string.IsNullOrEmpty(login))
-            {
-                Console.WriteLine("Login not specified");
-                return;
-            }
-
-            using var db = new DbContexted();
-
-            if (!db.Users.Any(x => x.Login == login))
-            {
-                Console.WriteLine("User not found");
-                return;
-            }
-
-            var blackListRecord = db.blackLists.FirstOrDefault(x => x.Login == login);
-
-            if (blackListRecord == null)
-            {
-                Console.WriteLine("User is not banned");
-                return;
-            }
-
-            int recordId = blackListRecord.Id;
-
-            var recordToDelete = db.blackLists.Find(recordId);
-            if (recordToDelete != null)
-            {
-                db.blackLists.Remove(recordToDelete);
-                db.SaveChanges();
-
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"User {login} unbanned");
-                Console.ResetColor();
-            }
-        }
-
-        public static void Ban(string command)
-        {
+            Console.ForegroundColor = ConsoleColor.White;
 
             Console.Write("Login: ");
             string login = Console.ReadLine();
-            if (string.IsNullOrEmpty(login))
-            {
-                Console.WriteLine("Login not specified");
-                return;
-            }
 
-            using var db = new DbContexted();
+            Console.Write("Password: ");
+            string password = Console.ReadLine();
 
-            if (!db.Users.Any(x => x.Login == login))
-            {
-                Console.WriteLine("User does not exist");
-                return;
-            }
+            IPEndPoint endPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+            Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            socket.Connect(endPoint);
 
-            if (db.blackLists.Any(x => x.Login == login))
-            {
-                Console.WriteLine("User already banned");
-                return;
-            }
+            string msg = $"/connect {login} {password}";
+            socket.Send(Encoding.UTF8.GetBytes(msg));
 
-            db.blackLists.Add(new BlackList { Login = login });
-            db.SaveChanges();
+            byte[] buffer = new byte[1024];
+            int size = socket.Receive(buffer);
+            string response = Encoding.UTF8.GetString(buffer, 0, size);
 
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"User {login} added to blacklist");
-        }
-        static void DisconnectServer(string сommand)
-        {
-            try
-            {
-                string Token = сommand.Replace("/disconnect", "").Trim();
-                Classes.Client DisconnectClient = AllClients.Find(x => x.Token == Token);
-                AllClients.Remove(DisconnectClient);
-
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write($"Client: {Token} disconnect from server");
-            }
-            catch (Exception exp)
+            if (response == "/auth_fail")
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error: " + exp.Message);
+                Console.WriteLine("Неверный логин или пароль.");
+                return;
             }
 
+            if (response == "/banned")
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Ваш аккаунт находится в черном списке!");
+                return;
+            }
+
+            if (response == "/limit")
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Нет свободных лицензий.");
+                return;
+            }
+
+            ClientToken = response;
+            ClientDateConnection = DateTime.Now;
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Успешное подключение. Ваш токен: " + ClientToken);
+        }
+
+        public static void CheckToken()
+        {
+            while (true)
+            {
+                if (!String.IsNullOrEmpty(ClientToken))
+                {
+                    IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+                    Socket Socket = new Socket(
+                        AddressFamily.InterNetwork,
+                        SocketType.Stream,
+                        ProtocolType.Tcp);
+
+                    try
+                    {
+                        Socket.Connect(EndPoint); ;
+
+                    }
+                    catch (Exception exp)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Error: " + exp.Message);
+                    }
+
+                    if (Socket.Connected)
+                    {
+
+                        Socket.Send(Encoding.UTF8.GetBytes(ClientToken));
+
+                        byte[] Bytes = new byte[10485760];
+                        int ByteRec = Socket.Receive(Bytes);
+
+                        string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                        if (Response == "/disconnect")
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("The client is disconnected from server");
+                            ClientToken = String.Empty;
+                        }
+                    }
+                }
+
+                Thread.Sleep(1000);
+            }
+
+
+        }
+
+        public static void GetStatus()
+        {
+            int Duration = (int)DateTime.Now.Subtract(ClientDateConnection).TotalSeconds;
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine($"Client: {ClientToken}, time connection: {ClientDateConnection.ToString("HH:mm:ss dd.MM")}, " +
+                $"duration: {Duration}"
+                );
         }
 
         public static void Help()
@@ -183,9 +161,9 @@ namespace Client
             Console.WriteLine(" - set initial settings ");
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.Write("/disconnect");
+            Console.Write("/connect");
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine(" - disconnect users from the server ");
+            Console.WriteLine(" - connection to the server ");
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.Write("/status");
@@ -204,8 +182,6 @@ namespace Client
                 IpAddress = streamReader.ReadLine();
                 ServerIpAddress = IPAddress.Parse(IpAddress);
                 ServerPort = int.Parse(streamReader.ReadLine());
-                MaxClient = int.Parse(streamReader.ReadLine());
-                Duration = int.Parse(streamReader.ReadLine());
                 streamReader.Close();
 
                 Console.ForegroundColor = ConsoleColor.White;
@@ -217,16 +193,6 @@ namespace Client
                 Console.Write("Server port: ");
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine(ServerPort.ToString());
-
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write("Max count clients: ");
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine(MaxClient.ToString());
-
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write("Token lifetime: ");
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine(Duration.ToString());
             }
             else
             {
@@ -241,21 +207,9 @@ namespace Client
                 Console.ForegroundColor = ConsoleColor.Green;
                 ServerPort = int.Parse(Console.ReadLine());
 
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write("Pleace indicate the largest number of clients ");
-                Console.ForegroundColor = ConsoleColor.Green;
-                MaxClient = int.Parse(Console.ReadLine());
-
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write("Specify the token lifetime ");
-                Console.ForegroundColor = ConsoleColor.Green;
-                Duration = int.Parse(Console.ReadLine());
-
                 StreamWriter streamWriter = new StreamWriter(Path);
                 streamWriter.WriteLine(IpAddress);
                 streamWriter.WriteLine(ServerPort.ToString());
-                streamWriter.WriteLine(MaxClient.ToString());
-                streamWriter.WriteLine(Duration.ToString());
                 streamWriter.Close();
             }
 
@@ -264,75 +218,6 @@ namespace Client
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("/config");
         }
-
-        static string SetCommandClient(string Command)
-        {
-
-
-            if (Command.StartsWith("/connect"))
-            {
-                string[] parts = Command.Split(' ');
-                if (parts.Length != 3) return "/auth_fail";
-
-                string login = parts[1];
-                string password = parts[2];
-
-                using var db = new DbContexted();
-
-                if (db.blackLists.Any(x => x.Login == login))
-                    return "/banned";
-
-                var user = db.Users.FirstOrDefault(x => x.Login == login && x.Password == password);
-                if (user == null)
-                    return "/auth_fail";
-
-                if (AllClients.Count < MaxClient)
-                {
-                    Classes.Client newClient = new Classes.Client();
-                    AllClients.Add(newClient);
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"New client connection: " + newClient.Token);
-
-                    return newClient.Token;
-
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"There is not enougt space on the license server");
-                    return "/limit";
-                }
-
-
-            }
-            else
-            {
-                Client c = AllClients.Find(x => x.Token == Command);
-                return c != null ? "/connect" : "/disconnect";
-            }
-            return null;
-        }
-        public static void ConnectServer()
-        {
-            IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
-            Socket SocketListener = new Socket(
-                AddressFamily.InterNetwork,
-                SocketType.Stream,
-                ProtocolType.Tcp);
-            SocketListener.Bind(EndPoint);
-            SocketListener.Listen(10);
-            while (true)
-            {
-                Socket Handler = SocketListener.Accept();
-                byte[] Bytes = new byte[10485760];
-                int ByteRec = Handler.Receive(Bytes);
-
-                string Message = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
-                string Response = SetCommandClient(Message);
-
-                Handler.Send(Encoding.UTF8.GetBytes(Response));
-            }
-
-        }
     }
+
 }
